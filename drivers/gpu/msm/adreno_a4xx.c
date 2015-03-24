@@ -27,57 +27,37 @@
 
 
 const unsigned int a4xx_registers[] = {
-	
 	0x0000, 0x0002, 0x0004, 0x0021, 0x0023, 0x0024, 0x0026, 0x0026,
 	0x0028, 0x002B, 0x002E, 0x0034, 0x0037, 0x0044, 0x0047, 0x0066,
 	0x0068, 0x0095, 0x009C, 0x0170, 0x0174, 0x01AF,
-	
+	/* CP */
 	0x0200, 0x0226, 0x0228, 0x0233, 0x0240, 0x0258, 0x04C0, 0x04D0,
 	0x04D2, 0x04DD, 0x0500, 0x050B, 0x0578, 0x058F,
-	
 	0x0C00, 0x0C03, 0x0C08, 0x0C41, 0x0C50, 0x0C51,
-	
 	0x0C80, 0x0C81, 0x0C88, 0x0C8F,
-	
 	0x0CC0, 0x0CC0, 0x0CC4, 0x0CD2,
-	
 	0x0D00, 0x0D0C, 0x0D10, 0x0D17, 0x0D20, 0x0D23,
-	
 	0x0E40, 0x0E4A,
-	
 	0x0E60, 0x0E61, 0x0E63, 0x0E68,
-	
 	0x0E80, 0x0E84, 0x0E88, 0x0E95,
-	
 	0x2000, 0x2004, 0x2008, 0x2067, 0x2070, 0x2078, 0x207B, 0x216E,
-	
 	0x21C0, 0x21C6, 0x21D0, 0x21D0, 0x21D9, 0x21D9, 0x21E5, 0x21E7,
-	
 	0x2200, 0x2204, 0x2208, 0x22A9,
-	
 	0x2400, 0x2404, 0x2408, 0x2467, 0x2470, 0x2478, 0x247B, 0x256E,
-	
 	0x25C0, 0x25C6, 0x25D0, 0x25D0, 0x25D9, 0x25D9, 0x25E5, 0x25E7,
-	
 	0x2600, 0x2604, 0x2608, 0x26A9,
 };
 
 const unsigned int a4xx_registers_count = ARRAY_SIZE(a4xx_registers) / 2;
 
 const unsigned int a4xx_sp_tp_registers[] = {
-	
 	0x0EC0, 0x0ECF,
-	
 	0x0F00, 0x0F0B,
-	
 	0x22C0, 0x22C1, 0x22C4, 0x22E5, 0x22E8, 0x22F8, 0x2300, 0x2306,
 	0x230C, 0x2312, 0x2318, 0x2339, 0x2340, 0x2360,
-	
 	0x2380, 0x2382, 0x2384, 0x238F, 0x23A0, 0x23A6,
-	+
 	0x26C0, 0x26C1, 0x26C4, 0x26E5, 0x26E8, 0x26F8, 0x2700, 0x2706,
 	0x270C, 0x2712, 0x2718, 0x2739, 0x2740, 0x2760,
-	
 	0x2780, 0x2782, 0x2784, 0x278F, 0x27A0, 0x27A6,
 };
 
@@ -550,9 +530,7 @@ static void a4xx_protect_init(struct adreno_device *adreno_dev)
 	int index = 0;
 	struct kgsl_protected_registers *iommu_regs;
 
-	
 	kgsl_regwrite(device, A4XX_CP_PROTECT_CTRL, 0x00000007);
-	
 	adreno_set_protected_registers(adreno_dev, &index, 0x4, 2);
 	adreno_set_protected_registers(adreno_dev, &index, 0x8, 3);
 	adreno_set_protected_registers(adreno_dev, &index, 0x10, 4);
@@ -568,17 +546,13 @@ static void a4xx_protect_init(struct adreno_device *adreno_dev)
 			   A4XX_RBBM_SECVID_TRUST_CONTROL, 1);
 	}
 
-	
 	adreno_set_protected_registers(adreno_dev, &index, 0x200, 7);
 	adreno_set_protected_registers(adreno_dev, &index, 0x580, 4);
 
-	
 	adreno_set_protected_registers(adreno_dev, &index, 0xCC0, 0);
 
-	
 	adreno_set_protected_registers(adreno_dev, &index, 0xE00, 0);
 
-	
 	adreno_set_protected_registers(adreno_dev, &index, 0xE60, 1);
 
 	if (adreno_is_a430(adreno_dev) || adreno_is_a420(adreno_dev) ||
@@ -588,7 +562,6 @@ static void a4xx_protect_init(struct adreno_device *adreno_dev)
 		adreno_set_protected_registers(adreno_dev, &index, 0x3400, 10);
 	}
 
-	
 	iommu_regs = kgsl_mmu_get_prot_regs(&device->mmu);
 	if (iommu_regs)
 		adreno_set_protected_registers(adreno_dev, &index,
@@ -613,22 +586,17 @@ static void a4xx_start(struct adreno_device *adreno_dev)
 
 	adreno_vbif_start(adreno_dev, a4xx_vbif_platforms,
 			ARRAY_SIZE(a4xx_vbif_platforms));
-	
 	kgsl_regwrite(device, A4XX_RBBM_GPU_BUSY_MASKED, 0xFFFFFFFF);
 
-	
 	kgsl_regwrite(device, A4XX_RBBM_SP_HYST_CNT, 0x10);
 	kgsl_regwrite(device, A4XX_RBBM_WAIT_IDLE_CLOCKS_CTL, 0x10);
 	if (adreno_is_a430(adreno_dev))
 		kgsl_regwrite(device, A4XX_RBBM_WAIT_IDLE_CLOCKS_CTL2, 0x30);
 
-
 	kgsl_regwrite(device, A4XX_RBBM_AHB_CTL0, 0x00000001);
 
-	
 	kgsl_regwrite(device, A4XX_RBBM_AHB_CTL1, 0xA6FFFFFF);
 
-	
 	kgsl_regwrite(device, A4XX_RBBM_RBBM_CTL, 0x00000030);
 
 	set_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv);
@@ -636,23 +604,17 @@ static void a4xx_start(struct adreno_device *adreno_dev)
 	kgsl_regwrite(device, A4XX_RBBM_INTERFACE_HANG_INT_CTL,
 			(1 << 30) | 0xFFFF);
 
-	
 	kgsl_regwrite(device, A4XX_RB_GMEM_BASE_ADDR,
 			(unsigned int)(adreno_dev->gmem_base >> 14));
 
-	
 	kgsl_regwrite(device, A4XX_RBBM_PERFCTR_CTL, 0x01);
-	
 	memset(&adreno_dev->busy_data, 0, sizeof(adreno_dev->busy_data));
 
-	
 	kgsl_regwrite(device, A4XX_UCHE_CACHE_WAYS_VFD, 0x07);
 
-	
 	kgsl_regwrite(device, UCHE_TRAP_BASE_LO, 0xffff0000);
 	kgsl_regwrite(device, UCHE_TRAP_BASE_HI, 0xffff0000);
 
-	
 	if (adreno_is_a420(adreno_dev))
 		cp_debug |= (1 << 29);
 	else
@@ -660,7 +622,6 @@ static void a4xx_start(struct adreno_device *adreno_dev)
 
 	kgsl_regwrite(device, A4XX_CP_DEBUG, cp_debug);
 
-	
 	if (!adreno_is_a420(adreno_dev)) {
 		kgsl_regwrite(device, A4XX_RBBM_SP_REGFILE_SLEEP_CNTL_0,
 				0x00000441);
@@ -677,7 +638,7 @@ static void a4xx_start(struct adreno_device *adreno_dev)
 		kgsl_regwrite(device, A4XX_RBBM_CLOCK_DELAY_HLSQ, val);
 	}
 
-	
+	/* A430 and derivatives offers bigger chunk of CP_STATE_DEBUG regs */
 	if (!adreno_is_a420(adreno_dev))
 		a4xx_snap_sizes.cp_state_deb = 0x34;
 
