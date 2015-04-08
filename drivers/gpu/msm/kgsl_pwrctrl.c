@@ -1659,7 +1659,6 @@ static int kgsl_pwrctrl_enable(struct kgsl_device *device)
 
 static void kgsl_pwrctrl_disable(struct kgsl_device *device)
 {
-	
 	device->ftbl->regulator_disable(device);
 	kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_OFF);
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_OFF, KGSL_STATE_SLEEP);
@@ -1672,16 +1671,15 @@ static int _init(struct kgsl_device *device)
 	switch (device->state) {
 	case KGSL_STATE_NAP:
 	case KGSL_STATE_SLEEP:
-		
 		status = kgsl_pwrctrl_enable(device);
 	case KGSL_STATE_ACTIVE:
 		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
 		del_timer_sync(&device->idle_timer);
 		device->ftbl->stop(device);
-		
+		kgsl_pwrscale_sleep(device);
+		/* fall through */
 	case KGSL_STATE_AWARE:
 		kgsl_pwrctrl_disable(device);
-		
 	case KGSL_STATE_SLUMBER:
 	case KGSL_STATE_NONE:
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_INIT);
@@ -1736,6 +1734,7 @@ static int _wake(struct kgsl_device *device)
 		
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_ACTIVE);
 		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_ON);
+		kgsl_pwrscale_wake(device);
 		mod_timer(&device->idle_timer, jiffies +
 				device->pwrctrl.interval_timeout);
 		break;
@@ -1762,6 +1761,7 @@ _aware(struct kgsl_device *device)
 	case KGSL_STATE_SLEEP:
 		status = _wake(device);
 	case KGSL_STATE_ACTIVE:
+		kgsl_pwrscale_sleep(device);
 		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
 		del_timer_sync(&device->idle_timer);
 		break;
