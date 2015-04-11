@@ -236,13 +236,11 @@ static struct kgsl_cmdbatch *_get_cmdbatch(struct adreno_context *drawctxt)
 
 	cmdbatch = drawctxt->cmdqueue[drawctxt->cmdqueue_head];
 
-	
 	if (cmdbatch->flags & KGSL_CMDBATCH_MARKER) {
 		if (_marker_expired(cmdbatch)) {
 			_pop_cmdbatch(drawctxt);
 			_retire_marker(cmdbatch);
 
-			
 			return _get_cmdbatch(drawctxt);
 		}
 
@@ -257,6 +255,11 @@ static struct kgsl_cmdbatch *_get_cmdbatch(struct adreno_context *drawctxt)
 	spin_unlock_bh(&cmdbatch->lock);
 
 	if (pending) {
+
+		/*
+		 * If syncpoints are pending start the canary timer if
+		 * it hasn't already been started
+		 */
 		if (!cmdbatch->timeout_jiffies) {
 			cmdbatch->timeout_jiffies = jiffies + 5 * HZ;
 			mod_timer(&cmdbatch->timer, cmdbatch->timeout_jiffies);
