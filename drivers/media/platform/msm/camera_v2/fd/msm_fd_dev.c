@@ -928,34 +928,32 @@ static void msm_fd_wq_handler(struct work_struct *work)
 
 	active_buf = msm_fd_hw_get_active_buffer(fd);
 	if (!active_buf) {
-		
 		dev_err(fd->dev, "Oops no active buffer empty queue\n");
 		return;
 	}
 	ctx = vb2_get_drv_priv(active_buf->vb.vb2_queue);
 
-	
 	ctx->sequence++;
 	if (unlikely(!ctx->sequence))
 		ctx->sequence = 1;
 
-	
 	stats = &ctx->stats[ctx->sequence % MSM_FD_MAX_RESULT_BUFS];
 
-	
 	atomic_set(&stats->frame_id, 0);
 
 	stats->face_cnt = msm_fd_hw_get_face_count(fd);
 	for (i = 0; i < stats->face_cnt; i++)
 		msm_fd_fill_results(fd, &stats->face_data[i], i);
 
-	
 	atomic_set(&stats->frame_id, ctx->sequence);
 
-	
 	msm_fd_hw_schedule_next_buffer(fd);
 
-	
+	/* Return buffer to vb queue */
+	active_buf->vb.v4l2_buf.sequence = ctx->fh.sequence;
+	vb2_buffer_done(&active_buf->vb, VB2_BUF_STATE_DONE);
+
+	/* Sent event */
 	memset(&event, 0x00, sizeof(event));
 	event.type = MSM_EVENT_FD;
 	fd_event = (struct msm_fd_event *)event.u.data;
@@ -964,11 +962,7 @@ static void msm_fd_wq_handler(struct work_struct *work)
 	fd_event->frame_id = ctx->sequence;
 	v4l2_event_queue_fh(&ctx->fh, &event);
 
-	
-	active_buf->vb.v4l2_buf.sequence = ctx->fh.sequence;
-	vb2_buffer_done(&active_buf->vb, VB2_BUF_STATE_DONE);
-
-	
+	/* Release buffer from the device */
 	msm_fd_hw_buffer_done(fd, active_buf);
 }
 
