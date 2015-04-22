@@ -1576,8 +1576,8 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 			pcpu->min_freq = policy->min;
 
 			up_read(&pcpu->enable_sem);
-
 		}
+
 		break;
 	}
 	return 0;
