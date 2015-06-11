@@ -155,7 +155,7 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 				unsigned int target_freq,
 				unsigned int relation)
 {
-	int ret = -EFAULT;
+	int ret = 0;
 	int index;
 	struct cpufreq_frequency_table *table;
 
