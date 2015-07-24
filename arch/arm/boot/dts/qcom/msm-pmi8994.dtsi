@@ -321,7 +321,7 @@
 			qcom,stored-batt-update-time = <(-1)>;
 			qcom,stored-batt-temperature = <271>;
 			qcom,stored-batt-temp-diff = <200>;
-			qcom,fg-chg-iterm-ma = <50>;
+			qcom,fg-chg-iterm-ma = <100>;
 			qcom,cycle-counter-en;
 			qcom,cycle-counter-low-soc = <15>;
 			qcom,cycle-counter-high-soc = <85>;
