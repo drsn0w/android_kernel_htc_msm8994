@@ -183,7 +183,7 @@ static int input_dev_filter(struct input_dev *dev) {
 	if (strstr(dev->name, "synaptics_dsx")) {
 		return 0;
 	} else if (strstr(dev->name, "max1187x_touchscreen_0")) {
-		s2s_y_limit = S2S_Y_MAX - 90;
+		s2s_y_limit = 2630;
 		return 0;
 	} else {
 		return 1;
