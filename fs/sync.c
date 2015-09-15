@@ -16,8 +16,9 @@
 #include "internal.h"
 #include <trace/events/mmcio.h>
 
-bool fsync_enabled = true;
-module_param(fsync_enabled, bool, 0755);
+#ifdef CONFIG_DYNAMIC_FSYNC
+#include <linux/dyn_sync_cntrl.h>
+#endif
 
 #define VALID_FLAGS (SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE| \
 			SYNC_FILE_RANGE_WAIT_AFTER)
@@ -72,6 +73,32 @@ static void fdatawait_one_bdev(struct block_device *bdev, void *arg)
 	filemap_fdatawait(bdev->bd_inode->i_mapping);
 }
 
+#ifdef CONFIG_DYNAMIC_FSYNC
+/*
+ * Sync all the data for all the filesystems (called by sys_sync() and
+ * emergency sync)
+ */
+void sync_filesystems(int wait)
+{
+	iterate_supers(sync_inodes_one_sb, NULL);
+	iterate_supers(sync_fs_one_sb, &wait);
+	iterate_supers(sync_fs_one_sb, &wait);
+	iterate_bdevs(fdatawrite_one_bdev, NULL);
+	iterate_bdevs(fdatawait_one_bdev, NULL);
+}
+#endif
+
+
+/*
+ * Sync everything. We start by waking flusher threads so that most of
+ * writeback runs on all devices in parallel. Then we sync all inodes reliably
+ * which effectively also waits for all flusher threads to finish doing
+ * writeback. At this point all data is on disk so metadata should be stable
+ * and we tell filesystems to sync their metadata via ->sync_fs() calls.
+ * Finally, we writeout all block devices because some filesystems (e.g. ext2)
+ * just write metadata (such as inodes or bitmaps) to block device page cache
+ * and do not sync it on their own in ->sync_fs().
+ */
 SYSCALL_DEFINE0(sync)
 {
 	int nowait = 0, wait = 1;
@@ -120,9 +147,6 @@ SYSCALL_DEFINE1(syncfs, int, fd)
 	struct super_block *sb;
 	int ret;
 
-	if (!fsync_enabled)
-		return 0;
-
 	if (!f.file)
 		return -EBADF;
 	sb = f.file->f_dentry->d_sb;
@@ -150,9 +174,10 @@ int vfs_fsync_range(struct file *file, loff_t start, loff_t end, int datasync)
 {
 	int err;
 
-	if (!fsync_enabled)
+#ifdef CONFIG_DYNAMIC_FSYNC
+	if (likely(dyn_fsync_active && suspend_active))
 		return 0;
-
+#endif
 	if (!file->f_op || !file->f_op->fsync)
 		return -EINVAL;
 	trace_vfs_fsync(file);
@@ -172,9 +197,6 @@ EXPORT_SYMBOL(vfs_fsync_range);
  */
 int vfs_fsync(struct file *file, int datasync)
 {
-	if (!fsync_enabled)
-		return 0;
-
 	return vfs_fsync_range(file, 0, LLONG_MAX, datasync);
 }
 EXPORT_SYMBOL(vfs_fsync);
@@ -183,9 +205,6 @@ static int do_fsync(unsigned int fd, int datasync)
 {
 	struct fd f = fdget(fd);
 	int ret = -EBADF;
-
-	if (!fsync_enabled)
-		return 0;
 
 	if (f.file) {
 		ret = vfs_fsync(f.file, datasync);
@@ -196,25 +215,24 @@ static int do_fsync(unsigned int fd, int datasync)
 
 SYSCALL_DEFINE1(fsync, unsigned int, fd)
 {
-	if (!fsync_enabled)
+#ifdef CONFIG_DYNAMIC_FSYNC
+	if (likely(dyn_fsync_active && suspend_active))
 		return 0;
-
+#endif
 	return do_fsync(fd, 0);
 }
 
 SYSCALL_DEFINE1(fdatasync, unsigned int, fd)
 {
-	if (!fsync_enabled)
+#ifdef CONFIG_DYNAMIC_FSYNC
+	if (likely(dyn_fsync_active && suspend_active))
 		return 0;
-
+#endif
 	return do_fsync(fd, 1);
 }
 
 int generic_write_sync(struct file *file, loff_t pos, loff_t count)
 {
-	if (!fsync_enabled)
-		return 0;
-
 	if (!(file->f_flags & O_DSYNC) && !IS_SYNC(file->f_mapping->host))
 		return 0;
 	return vfs_fsync_range(file, pos, pos + count - 1,
@@ -228,12 +246,13 @@ SYSCALL_DEFINE4(sync_file_range, int, fd, loff_t, offset, loff_t, nbytes,
 	int ret;
 	struct fd f;
 	struct address_space *mapping;
-	loff_t endbyte;			
+	loff_t endbyte;
 	umode_t i_mode;
 
-	if (!fsync_enabled)
+#ifdef CONFIG_DYNAMIC_FSYNC
+	if (likely(dyn_fsync_active && suspend_active))
 		return 0;
-
+#endif
 	ret = -EINVAL;
 	if (flags & ~VALID_FLAGS)
 		goto out;
@@ -304,5 +323,9 @@ out:
 SYSCALL_DEFINE4(sync_file_range2, int, fd, unsigned int, flags,
 				 loff_t, offset, loff_t, nbytes)
 {
+#ifdef CONFIG_DYNAMIC_FSYNC
+	if (likely(dyn_fsync_active && suspend_active))
+		return 0;
+#endif
 	return sys_sync_file_range(fd, offset, nbytes, flags);
 }
