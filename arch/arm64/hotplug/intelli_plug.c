@@ -1,6 +1,7 @@
 /*
  * Intelli Hotplug Driver
  *
+ * Copyright (c) 2015, Chad Cormier Roussel <chadcormierroussel@gmail.com>
  * Copyright (c) 2013-2014, Paul Reioux <reioux@gmail.com>
  * Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
@@ -24,41 +25,32 @@
 #include <linux/cpufreq.h>
 
 #define INTELLI_PLUG			"intelli_plug"
-#define INTELLI_PLUG_MAJOR_VERSION	5
-#define INTELLI_PLUG_MINOR_VERSION	1
+#define INTELLI_PLUG_MAJOR_VERSION	  5
+#define INTELLI_PLUG_MINOR_VERSION	  1
 
-#define DEF_SAMPLING_MS			HZ * 10
-#define RESUME_SAMPLING_MS		HZ * 2
-#define START_DELAY_MS			HZ * 20
-#define MIN_INPUT_INTERVAL		150 * 1000L
-#define BOOST_LOCK_DUR			2500 * 1000L
-#define DEFAULT_NR_CPUS_BOOSTED		1
-#define DEFAULT_MIN_CPUS_ONLINE		1
-#define DEFAULT_MAX_CPUS_ONLINE		NR_CPUS/2
-#define DEFAULT_NR_FSHIFT               3
-#define DEFAULT_DOWN_LOCK_DUR		1500
+#define DEF_SAMPLING_MS			          HZ * 2
+#define RESUME_SAMPLING_MS		        HZ
+#define START_DELAY_MS			          HZ * 10
+#define MIN_INPUT_INTERVAL	          150 * 1000L
+#define BOOST_LOCK_DUR			          2500 * 1000L
+#define DEFAULT_NR_CPUS_BOOSTED		    2
+#define DEFAULT_MIN_CPUS_ONLINE		    1
+#define DEFAULT_MAX_CPUS_ONLINE		    NR_CPUS
+#define DEFAULT_NR_FSHIFT             3
+#define DEFAULT_DOWN_LOCK_DUR		      1500
 #define DEFAULT_MAX_CPUS_ONLINE_SUSP	1
 
-#define CAPACITY_RESERVE		50
+#define CAPACITY_RESERVE		          50
+
 #if defined(CONFIG_ARCH_MSM8994)
-#define THREAD_CAPACITY                 (1420 - CAPACITY_RESERVE)
-#elif defined(CONFIG_ARCH_APQ8084) || defined(CONFIG_ARM64)
-#define THREAD_CAPACITY 		(430 - CAPACITY_RESERVE)
-#elif defined(CONFIG_ARCH_MSM8960) || defined(CONFIG_ARCH_APQ8064) || \
-defined(CONFIG_ARCH_MSM8974)
-#define THREAD_CAPACITY			(339 - CAPACITY_RESERVE)
-#elif defined(CONFIG_ARCH_MSM8226) || defined (CONFIG_ARCH_MSM8926) || \
-defined (CONFIG_ARCH_MSM8610) || defined (CONFIG_ARCH_MSM8228)
-#define THREAD_CAPACITY			(190 - CAPACITY_RESERVE)
+#define THREAD_CAPACITY               (430 - CAPACITY_RESERVE)
 #else
-#define THREAD_CAPACITY			(250 - CAPACITY_RESERVE)
+#define THREAD_CAPACITY			          (250 - CAPACITY_RESERVE)
 #endif
-#define CPU_NR_THRESHOLD		((THREAD_CAPACITY << DEFAULT_NR_FSHIFT) + (THREAD_CAPACITY / NR_CPUS))
-#if defined(CONFIG_ARM64)
-#define MULT_FACTOR			16
-#else
-#define MULT_FACTOR			4
-#endif
+
+#define CPU_NR_THRESHOLD		((THREAD_CAPACITY << 1) - (THREAD_CAPACITY >> 1))
+
+#define MULT_FACTOR			NR_CPUS
 #define DIV_FACTOR			100000
 
 static u64 last_boost_time, last_input;
@@ -102,57 +94,48 @@ do { 				\
 } while (0)
 
 static unsigned int nr_run_thresholds_balance[] = {
-        (THREAD_CAPACITY * 700 * MULT_FACTOR) / DIV_FACTOR,
-        (THREAD_CAPACITY * 1000 * MULT_FACTOR) / DIV_FACTOR,
-        (THREAD_CAPACITY * 1400 * MULT_FACTOR) / DIV_FACTOR,
-        (THREAD_CAPACITY * 1700 * MULT_FACTOR) / DIV_FACTOR,
-        (THREAD_CAPACITY * 2100 * MULT_FACTOR) / DIV_FACTOR,
-        (THREAD_CAPACITY * 2400 * MULT_FACTOR) / DIV_FACTOR,
-        (THREAD_CAPACITY * 2700 * MULT_FACTOR) / DIV_FACTOR,
-        UINT_MAX
+  (THREAD_CAPACITY * 300 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 450 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 650 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 900 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1050 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1250 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1300 * MULT_FACTOR * 2) / DIV_FACTOR,
+  UINT_MAX
 };
 
 static unsigned int nr_run_thresholds_performance[] = {
-	(THREAD_CAPACITY * 380 * MULT_FACTOR) / DIV_FACTOR,
-	(THREAD_CAPACITY * 625 * MULT_FACTOR) / DIV_FACTOR,
-	(THREAD_CAPACITY * 875 * MULT_FACTOR) / DIV_FACTOR,
-	UINT_MAX
+	(THREAD_CAPACITY * 300 * MULT_FACTOR) / DIV_FACTOR,
+  (THREAD_CAPACITY * 550 * MULT_FACTOR) / DIV_FACTOR,
+  (THREAD_CAPACITY * 800 * MULT_FACTOR) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1050 * MULT_FACTOR) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1300 * MULT_FACTOR) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1550 * MULT_FACTOR) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1800 * MULT_FACTOR) / DIV_FACTOR,
+  UINT_MAX
 };
 
 static unsigned int nr_run_thresholds_conservative[] = {
-	(THREAD_CAPACITY * 875 * MULT_FACTOR) / DIV_FACTOR,
-	(THREAD_CAPACITY * 1625 * MULT_FACTOR) / DIV_FACTOR,
-	(THREAD_CAPACITY * 2125 * MULT_FACTOR) / DIV_FACTOR,
-	UINT_MAX
+  (THREAD_CAPACITY * 300 * MULT_FACTOR * 3) / DIV_FACTOR,
+  (THREAD_CAPACITY * 550 * MULT_FACTOR * 3) / DIV_FACTOR,
+  (THREAD_CAPACITY * 800 * MULT_FACTOR * 3) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1050 * MULT_FACTOR * 3) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1300 * MULT_FACTOR * 3) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1550 * MULT_FACTOR * 3) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1800 * MULT_FACTOR * 3) / DIV_FACTOR,
+  UINT_MAX
 };
 
 static unsigned int nr_run_thresholds_disable[] = {
 	0,  0,  0,  UINT_MAX
 };
 
-static unsigned int nr_run_thresholds_tri[] = {
-	(THREAD_CAPACITY * 625 * MULT_FACTOR) / DIV_FACTOR,
-	(THREAD_CAPACITY * 875 * MULT_FACTOR) / DIV_FACTOR,
-	UINT_MAX
-};
-
-static unsigned int nr_run_thresholds_eco[] = {
-        (THREAD_CAPACITY * 380 * MULT_FACTOR) / DIV_FACTOR,
-	UINT_MAX
-};
-
-static unsigned int nr_run_thresholds_strict[] = {
-	UINT_MAX
-};
 
 static unsigned int *nr_run_profiles[] = {
 	nr_run_thresholds_balance,
 	nr_run_thresholds_performance,
 	nr_run_thresholds_conservative,
-	nr_run_thresholds_disable,
-	nr_run_thresholds_tri,
-	nr_run_thresholds_eco,
-	nr_run_thresholds_strict
+	nr_run_thresholds_disable
 	};
 
 static unsigned int nr_run_last;
@@ -194,20 +177,13 @@ static unsigned int calculate_thread_stats(void)
 	unsigned int *current_profile;
 
 	threshold_size = max_cpus_online;
-	nr_run_hysteresis = max_cpus_online * 2;
-	nr_fshift = max_cpus_online - 1;
+	nr_run_hysteresis = max_cpus_online + 4;
+	nr_fshift = 4;
 
 	for (nr_run = 1; nr_run < threshold_size; nr_run++) {
 		unsigned int nr_threshold;
-		if (max_cpus_online >= 4)
-			current_profile = nr_run_profiles[full_mode_profile];
-		else if (max_cpus_online == 3)
-			current_profile = nr_run_profiles[4];
-		else if (max_cpus_online == 2)
-			current_profile = nr_run_profiles[5];
-		else
-			current_profile = nr_run_profiles[6];
-
+		
+		current_profile = nr_run_profiles[full_mode_profile];
 		nr_threshold = current_profile[nr_run - 1];
 
 		if (nr_run_last <= nr_run)
@@ -253,7 +229,7 @@ static void __ref cpu_up_down_work(struct work_struct *work)
 		for_each_online_cpu(cpu) {
 			if (cpu == 0)
 				continue;
-			if (check_down_lock(cpu) || check_cpuboost(cpu))
+			if (check_down_lock(cpu))
 				break;
 			l_nr_threshold =
 				cpu_nr_run_threshold << 1 / (num_online_cpus());

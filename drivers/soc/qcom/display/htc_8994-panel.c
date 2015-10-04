@@ -25,8 +25,9 @@
 
 #include "../../../../drivers/video/msm/mdss/mdss_dsi.h"
 
+#ifdef CONFIG_HTC_PNPMGR
 extern void set_screen_status(bool onoff);
-
+#endif
 enum pane_id {
 	PANEL_JDI_RENESAS  = 0,
 	PANEL_TIA_RES63315 = 1,
@@ -34,14 +35,14 @@ enum pane_id {
 };
 
 struct dsi_power_data {
-	uint32_t sysrev;         			
+	uint32_t sysrev;
 	struct regulator *tp_3v3;
 	struct regulator *tp_1v8;
-	struct regulator *vddio; 			
-	struct regulator *vdda;  			
-	struct regulator *vddpll;    			
-	uint16_t lcmp5v;				
-	uint16_t lcmn5v;				
+	struct regulator *vddio;
+	struct regulator *vdda;
+	struct regulator *vddpll;
+	uint16_t lcmp5v;
+	uint16_t lcmn5v;
 	uint16_t lcmio;
 	uint16_t lcmrst;
 };
@@ -452,15 +453,15 @@ static int htc_hima_panel_power_on(struct mdss_panel_data *pdata)
 		ret = -EINVAL;
 	}
 
-	if (pdata->panel_info.htc_panel_id == PANEL_TDI_RES69338 &&	
+	if (pdata->panel_info.htc_panel_id == PANEL_TDI_RES69338 &&
 		dsi_pwrctrl.incell_touch_on != NULL)
 		dsi_pwrctrl.incell_touch_on(1);
 
 	PR_DISP_INFO("--%s(%s)--\n", __func__, ((voltage == VOL_5V0) ? "5V" :
 						(voltage == VOL_5V4) ? "5V4" : "5V5"));
-
+#ifdef CONFIG_HTC_PNPMGR
 	set_screen_status(true);
-
+#endif
 	return ret;
 }
 
@@ -510,8 +511,9 @@ static int htc_hima_panel_power_off(struct mdss_panel_data *pdata)
 	}
 	PR_DISP_INFO("--%s()--\n", __func__);
 
+#ifdef CONFIG_HTC_PNPMGR
 	set_screen_status(false);
-
+#endif
 	return ret;
 }
 
