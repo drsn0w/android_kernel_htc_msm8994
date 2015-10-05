@@ -28,19 +28,18 @@
 #define INTELLI_PLUG_MAJOR_VERSION	  5
 #define INTELLI_PLUG_MINOR_VERSION	  1
 
-#define DEF_SAMPLING_MS			          HZ * 2
-#define RESUME_SAMPLING_MS		        HZ
-#define START_DELAY_MS			          HZ * 10
+#define DEF_SAMPLING_MS			  HZ * 2
+#define RESUME_SAMPLING_MS		  HZ / 5
+#define START_DELAY_MS			  HZ * 10
 #define MIN_INPUT_INTERVAL	          150 * 1000L
-#define BOOST_LOCK_DUR			          2500 * 1000L
-#define DEFAULT_NR_CPUS_BOOSTED		    2
-#define DEFAULT_MIN_CPUS_ONLINE		    1
-#define DEFAULT_MAX_CPUS_ONLINE		    NR_CPUS
-#define DEFAULT_NR_FSHIFT             3
-#define DEFAULT_DOWN_LOCK_DUR		      1500
-#define DEFAULT_MAX_CPUS_ONLINE_SUSP	1
-
-#define CAPACITY_RESERVE		          50
+#define BOOST_LOCK_DUR			  2500 * 1000L
+#define DEFAULT_NR_CPUS_BOOSTED		  2
+#define DEFAULT_MIN_CPUS_ONLINE		  1
+#define DEFAULT_MAX_CPUS_ONLINE		  NR_CPUS
+#define DEFAULT_NR_FSHIFT                 3
+#define DEFAULT_DOWN_LOCK_DUR		  1500
+#define DEFAULT_MAX_CPUS_ONLINE_SUSP	  1
+#define CAPACITY_RESERVE		  50
 
 #if defined(CONFIG_ARCH_MSM8994)
 #define THREAD_CAPACITY               (430 - CAPACITY_RESERVE)
