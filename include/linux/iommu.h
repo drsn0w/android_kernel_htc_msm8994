@@ -29,8 +29,7 @@
 #define IOMMU_WRITE	(1 << 1)
 #define IOMMU_CACHE	(1 << 2) /* DMA cache coherency */
 #define IOMMU_EXEC	(1 << 3)
-#define IOMMU_PRIV	(1 << 4)
-#define IOMMU_DEVICE	(1 << 5) /* Indicates access to device memory */
+#define IOMMU_PRIV	(16)
 
 struct iommu_ops;
 struct iommu_group;
@@ -68,8 +67,6 @@ enum iommu_attr {
 	DOMAIN_ATTR_PAGING,
 	DOMAIN_ATTR_WINDOWS,
 	DOMAIN_ATTR_COHERENT_HTW_DISABLE,
-	DOMAIN_ATTR_PT_BASE_ADDR,
-	DOMAIN_ATTR_ATOMIC,
 	DOMAIN_ATTR_MAX,
 };
 
@@ -83,8 +80,6 @@ enum iommu_attr {
  * @detach_dev: detach device from an iommu domain
  * @map: map a physically contiguous memory region to an iommu domain
  * @unmap: unmap a physically contiguous memory region from an iommu domain
- * @map_sg: map a scatter-gather list of physically contiguous memory chunks
- * to an iommu domain
  * @iova_to_phys: translate iova to physical address
  * @domain_has_cap: domain capabilities query
  * @add_device: add device to iommu grouping
@@ -102,12 +97,10 @@ struct iommu_ops {
 		   phys_addr_t paddr, size_t size, int prot);
 	size_t (*unmap)(struct iommu_domain *domain, unsigned long iova,
 		     size_t size);
-	int (*map_range)(struct iommu_domain *domain, unsigned long iova,
-		    struct scatterlist *sg, size_t len, int prot);
-	int (*unmap_range)(struct iommu_domain *domain, unsigned long iova,
-		      size_t len);
-	size_t (*map_sg)(struct iommu_domain *domain, unsigned long iova,
-			 struct scatterlist *sg, unsigned int nents, int prot);
+	int (*map_range)(struct iommu_domain *domain, unsigned int iova,
+		    struct scatterlist *sg, unsigned int len, int prot);
+	int (*unmap_range)(struct iommu_domain *domain, unsigned int iova,
+		      unsigned int len);
 	phys_addr_t (*iova_to_phys)(struct iommu_domain *domain, dma_addr_t iova);
 	int (*domain_has_cap)(struct iommu_domain *domain,
 			      unsigned long cap);
@@ -152,13 +145,10 @@ extern int iommu_map(struct iommu_domain *domain, unsigned long iova,
 		     phys_addr_t paddr, size_t size, int prot);
 extern size_t iommu_unmap(struct iommu_domain *domain, unsigned long iova,
 		       size_t size);
-extern int iommu_map_range(struct iommu_domain *domain, unsigned long iova,
-		    struct scatterlist *sg, size_t len, int prot);
-extern int iommu_unmap_range(struct iommu_domain *domain, unsigned long iova,
-		      size_t len);
-extern size_t default_iommu_map_sg(struct iommu_domain *domain, unsigned long iova,
-				struct scatterlist *sg,unsigned int nents,
-				int prot);
+extern int iommu_map_range(struct iommu_domain *domain, unsigned int iova,
+		    struct scatterlist *sg, unsigned int len, int prot);
+extern int iommu_unmap_range(struct iommu_domain *domain, unsigned int iova,
+		      unsigned int len);
 extern phys_addr_t iommu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova);
 extern int iommu_domain_has_cap(struct iommu_domain *domain,
 				unsigned long cap);
@@ -240,13 +230,6 @@ static inline int report_iommu_fault(struct iommu_domain *domain,
 	return ret;
 }
 
-static inline size_t iommu_map_sg(struct iommu_domain *domain,
-				  unsigned long iova, struct scatterlist *sg,
-				  unsigned int nents, int prot)
-{
-	return domain->ops->map_sg(domain, iova, sg, nents, prot);
-}
-
 #else /* CONFIG_IOMMU_API */
 
 struct iommu_ops {};
@@ -289,13 +272,6 @@ static inline int iommu_unmap(struct iommu_domain *domain, unsigned long iova,
 	return -ENODEV;
 }
 
-static inline size_t iommu_map_sg(struct iommu_domain *domain,
-				  unsigned long iova, struct scatterlist *sg,
-				  unsigned int nents, int prot)
-{
-	return -ENODEV;
-}
-
 static inline int iommu_domain_window_enable(struct iommu_domain *domain,
 					     u32 wnd_nr, phys_addr_t paddr,
 					     u64 size, int prot)
@@ -309,14 +285,14 @@ static inline void iommu_domain_window_disable(struct iommu_domain *domain,
 }
 
 static inline int iommu_map_range(struct iommu_domain *domain,
-				  unsigned long iova, struct scatterlist *sg,
-				  size_t len, int prot)
+				  unsigned int iova, struct scatterlist *sg,
+				  unsigned int len, int prot)
 {
 	return -ENODEV;
 }
 
 static inline int iommu_unmap_range(struct iommu_domain *domain,
-				    unsigned long iova, size_t len)
+				    unsigned int iova, unsigned int len)
 {
 	return -ENODEV;
 }
