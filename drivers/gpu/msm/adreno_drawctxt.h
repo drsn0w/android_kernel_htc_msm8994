@@ -13,8 +13,6 @@
 #ifndef __ADRENO_DRAWCTXT_H
 #define __ADRENO_DRAWCTXT_H
 
-#include "adreno_pm4types.h"
-
 struct adreno_context_type {
 	unsigned int type;
 	const char *str;
@@ -107,7 +105,7 @@ enum adreno_context_priv {
 struct kgsl_context *adreno_drawctxt_create(struct kgsl_device_private *,
 			uint32_t *flags);
 
-int adreno_drawctxt_detach(struct kgsl_context *context);
+void adreno_drawctxt_detach(struct kgsl_context *context);
 
 void adreno_drawctxt_destroy(struct kgsl_context *context);
 
