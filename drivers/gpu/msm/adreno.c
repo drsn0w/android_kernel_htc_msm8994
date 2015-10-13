@@ -194,7 +194,6 @@ static void adreno_input_event(struct input_handle *handle, unsigned int type,
 	struct kgsl_device *device = handle->handler->private;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
-	
 	if (type != EV_ABS)
 		return;
 
