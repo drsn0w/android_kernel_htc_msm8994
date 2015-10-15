@@ -78,7 +78,6 @@
 #define L_PTE_SPECIAL		(_AT(pteval_t, 1) << 56)
 #define L_PTE_NONE		(_AT(pteval_t, 1) << 57)	/* PROT_NONE */
 #define L_PTE_RDONLY		(_AT(pteval_t, 1) << 58)	/* READ ONLY */
-
 #define PMD_SECT_VALID		(_AT(pmdval_t, 1) << 0)
 #define PMD_SECT_DIRTY		(_AT(pmdval_t, 1) << 55)
 #define PMD_SECT_SPLITTING	(_AT(pmdval_t, 1) << 56)

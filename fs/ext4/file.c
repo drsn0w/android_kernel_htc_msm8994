@@ -113,6 +113,7 @@ ext4_file_dio_write(struct kiocb *iocb, const struct iovec *iov,
 	mutex_lock(&inode->i_mutex);
 	blk_start_plug(&plug);
 
+	/* check whether we do a DIO overwrite or not */
 	if (ext4_should_dioread_nolock(inode) && !unaligned_aio &&
 	    !file->f_mapping->nrpages && pos + length <= i_size_read(inode)) {
 		struct ext4_map_blocks map;

@@ -343,6 +343,9 @@ static void i2c_hid_get_input(struct i2c_hid *ihid)
 	int ret, ret_size;
 	int size = ihid->bufsize;
 
+	if (size > ihid->bufsize)
+		size = ihid->bufsize;
+
 	ret = i2c_master_recv(ihid->client, ihid->inbuf, size);
 	if (ret != size) {
 		if (ret < 0)

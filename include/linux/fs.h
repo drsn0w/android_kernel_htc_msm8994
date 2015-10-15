@@ -10,6 +10,7 @@
 #include <linux/stat.h>
 #include <linux/cache.h>
 #include <linux/list.h>
+#include <linux/llist.h>
 #include <linux/radix-tree.h>
 #include <linux/rbtree.h>
 #include <linux/init.h>
@@ -546,7 +547,7 @@ static inline int ra_has_index(struct file_ra_state *ra, pgoff_t index)
 
 struct file {
 	union {
-		struct list_head	fu_list;
+		struct llist_node	fu_llist;
 		struct rcu_head 	fu_rcuhead;
 	} f_u;
 	struct path		f_path;
@@ -555,9 +556,6 @@ struct file {
 	const struct file_operations	*f_op;
 
 	spinlock_t		f_lock;
-#ifdef CONFIG_SMP
-	int			f_sb_list_cpu;
-#endif
 	atomic_long_t		f_count;
 	unsigned int 		f_flags;
 	fmode_t			f_mode;
@@ -921,7 +919,7 @@ static inline void unlock_flocks(void)
 {
 }
 
-#endif 
+#endif
 
 
 struct fasync_struct {
@@ -952,42 +950,41 @@ extern int send_sigurg(struct fown_struct *fown);
 struct mm_struct;
 
 
-#define MNT_FORCE	0x00000001	
-#define MNT_DETACH	0x00000002	
-#define MNT_EXPIRE	0x00000004	
-#define UMOUNT_NOFOLLOW	0x00000008	
-#define UMOUNT_UNUSED	0x80000000	
+#define MNT_FORCE	0x00000001
+#define MNT_DETACH	0x00000002
+#define MNT_EXPIRE	0x00000004
+#define UMOUNT_NOFOLLOW	0x00000008
+#define UMOUNT_UNUSED	0x80000000
 
 extern struct list_head super_blocks;
 extern spinlock_t sb_lock;
 
 enum {
-	SB_UNFROZEN = 0,		
-	SB_FREEZE_WRITE	= 1,		
-	SB_FREEZE_PAGEFAULT = 2,	
-	SB_FREEZE_FS = 3,		
-	SB_FREEZE_COMPLETE = 4,		
+	SB_UNFROZEN = 0,
+	SB_FREEZE_WRITE	= 1,
+	SB_FREEZE_PAGEFAULT = 2,
+	SB_FREEZE_FS = 3,
+	SB_FREEZE_COMPLETE = 4,
 };
 
 #define SB_FREEZE_LEVELS (SB_FREEZE_COMPLETE - 1)
 
 struct sb_writers {
-	
 	struct percpu_counter	counter[SB_FREEZE_LEVELS];
-	wait_queue_head_t	wait;		
-	int			frozen;		
-	wait_queue_head_t	wait_unfrozen;	
+	wait_queue_head_t	wait;
+	int			frozen;
+	wait_queue_head_t	wait_unfrozen;
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map	lock_map[SB_FREEZE_LEVELS];
 #endif
 };
 
 struct super_block {
-	struct list_head	s_list;		
-	dev_t			s_dev;		
+	struct list_head	s_list;
+	dev_t			s_dev;
 	unsigned char		s_blocksize_bits;
 	unsigned long		s_blocksize;
-	loff_t			s_maxbytes;	
+	loff_t			s_maxbytes;
 	struct file_system_type	*s_type;
 	const struct super_operations	*s_op;
 	const struct dquot_operations	*dq_op;
@@ -1004,55 +1001,38 @@ struct super_block {
 #endif
 	const struct xattr_handler **s_xattr;
 
-	struct list_head	s_inodes;	
-	struct hlist_bl_head	s_anon;		
+	struct list_head	s_inodes;
+	struct hlist_bl_head	s_anon;
 #ifdef CONFIG_SMP
 	struct list_head __percpu *s_files;
 #else
 	struct list_head	s_files;
 #endif
-	struct list_head	s_mounts;	
-	
-	struct list_head	s_dentry_lru;	
-	int			s_nr_dentry_unused;	
-
-	
+	struct list_head	s_mounts;
+	struct list_head	s_dentry_lru;
+	int			s_nr_dentry_unused;
 	spinlock_t		s_inode_lru_lock ____cacheline_aligned_in_smp;
-	struct list_head	s_inode_lru;		
-	int			s_nr_inodes_unused;	
-
+	struct list_head	s_inode_lru;
+	int			s_nr_inodes_unused;
 	struct block_device	*s_bdev;
 	struct backing_dev_info *s_bdi;
 	struct mtd_info		*s_mtd;
 	struct hlist_node	s_instances;
-	struct quota_info	s_dquot;	
-
+	struct quota_info	s_dquot;
 	struct sb_writers	s_writers;
-
-	char s_id[32];				
-	u8 s_uuid[16];				
-
-	void 			*s_fs_info;	
+	char s_id[32];
+	u8 s_uuid[16];
+	void 			*s_fs_info;
 	unsigned int		s_max_links;
 	fmode_t			s_mode;
-
 	u32		   s_time_gran;
-
-	struct mutex s_vfs_rename_mutex;	
-
+	struct mutex s_vfs_rename_mutex;
 	char *s_subtype;
-
 	char __rcu *s_options;
-	const struct dentry_operations *s_d_op; 
-
+	const struct dentry_operations *s_d_op;
 	int cleancache_poolid;
-
-	struct shrinker s_shrink;	
-
-	
+	struct shrinker s_shrink;
 	atomic_long_t s_remove_count;
-
-	
 	int s_readonly_remount;
 };
 

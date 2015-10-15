@@ -290,10 +290,10 @@ static int blk_mangle_minor(int minor)
 		int high = minor & (1 << (MINORBITS - 1 - i));
 		int distance = MINORBITS - 1 - 2 * i;
 
-		minor ^= low | high;	
-		low <<= distance;	
+		minor ^= low | high;
+		low <<= distance;
 		high >>= distance;
-		minor |= low | high;	
+		minor |= low | high;
 	}
 #endif
 	return minor;
@@ -312,9 +312,9 @@ int blk_alloc_devt(struct hd_struct *part, dev_t *devt)
 	/* allocate ext devt */
 	idr_preload(GFP_KERNEL);
 
-	spin_lock(&ext_devt_lock);
+	spin_lock_bh(&ext_devt_lock);
 	idx = idr_alloc(&ext_devt_idr, part, 0, NR_EXT_DEVT, GFP_NOWAIT);
-	spin_unlock(&ext_devt_lock);
+	spin_unlock_bh(&ext_devt_lock);
 
 	idr_preload_end();
 	if (idx < 0)
@@ -330,9 +330,9 @@ void blk_free_devt(dev_t devt)
 		return;
 
 	if (MAJOR(devt) == BLOCK_EXT_MAJOR) {
-		spin_lock(&ext_devt_lock);
+		spin_lock_bh(&ext_devt_lock);
 		idr_remove(&ext_devt_idr, blk_mangle_minor(MINOR(devt)));
-		spin_unlock(&ext_devt_lock);
+		spin_unlock_bh(&ext_devt_lock);
 	}
 }
 
@@ -586,14 +586,13 @@ struct gendisk *get_gendisk(dev_t devt, int *partno)
 			disk = dev_to_disk(kobj_to_dev(kobj));
 	} else {
 		struct hd_struct *part;
-
-		spin_lock(&ext_devt_lock);
+		spin_lock_bh(&ext_devt_lock);
 		part = idr_find(&ext_devt_idr, blk_mangle_minor(MINOR(devt)));
 		if (part && get_disk(part_to_disk(part))) {
 			*partno = part->partno;
 			disk = part_to_disk(part);
 		}
-		spin_unlock(&ext_devt_lock);
+		spin_unlock_bh(&ext_devt_lock);
 	}
 
 	return disk;

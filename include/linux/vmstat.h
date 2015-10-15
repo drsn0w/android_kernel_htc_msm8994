@@ -99,6 +99,8 @@ static inline void zone_page_state_add(long x, struct zone *zone,
 	atomic_long_add(x, &vm_stat[item]);
 }
 
+extern unsigned long zone_reclaimable_pages(struct zone *zone);
+
 static inline unsigned long global_page_state(enum zone_stat_item item)
 {
 	long x = atomic_long_read(&vm_stat[item]);
