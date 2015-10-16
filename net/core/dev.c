@@ -704,7 +704,7 @@ bool dev_valid_name(const char *name)
 		return false;
 
 	while (*name) {
-		if (*name == '/' || *name == ':' || isspace(*name))
+		if (*name == '/' || isspace(*name))
 			return false;
 		name++;
 	}
@@ -2782,6 +2782,8 @@ static int __netif_receive_skb_core(struct sk_buff *skb, bool pfmemalloc)
 
 	pt_prev = NULL;
 
+	rcu_read_lock();
+
 another_round:
 	skb->skb_iif = skb->dev->ifindex;
 
@@ -2791,7 +2793,7 @@ another_round:
 	    skb->protocol == cpu_to_be16(ETH_P_8021AD)) {
 		skb = vlan_untag(skb);
 		if (unlikely(!skb))
-			goto out;
+			goto unlock;
 	}
 
 #ifdef CONFIG_NET_CLS_ACT
@@ -2816,7 +2818,7 @@ skip_taps:
 #ifdef CONFIG_NET_CLS_ACT
 	skb = handle_ing(skb, &pt_prev, &ret, orig_dev);
 	if (!skb)
-		goto out;
+		goto unlock;
 ncls:
 #endif
 
@@ -2831,7 +2833,7 @@ ncls:
 		if (vlan_do_receive(&skb))
 			goto another_round;
 		else if (unlikely(!skb))
-			goto out;
+			goto unlock;
 	}
 
 	rx_handler = rcu_dereference(skb->dev->rx_handler);
@@ -2843,7 +2845,7 @@ ncls:
 		switch (rx_handler(&skb)) {
 		case RX_HANDLER_CONSUMED:
 			ret = NET_RX_SUCCESS;
-			goto out;
+			goto unlock;
 		case RX_HANDLER_ANOTHER:
 			goto another_round;
 		case RX_HANDLER_EXACT:
@@ -2888,6 +2890,8 @@ drop:
 		ret = NET_RX_DROP;
 	}
 
+unlock:
+	rcu_read_unlock();
 out:
 	return ret;
 }
@@ -2910,30 +2914,29 @@ static int __netif_receive_skb(struct sk_buff *skb)
 
 int netif_receive_skb(struct sk_buff *skb)
 {
-	int ret;
-
 	net_timestamp_check(netdev_tstamp_prequeue, skb);
 
 	if (skb_defer_rx_timestamp(skb))
 		return NET_RX_SUCCESS;
 
-	rcu_read_lock();
-
 #ifdef CONFIG_RPS
 	if (static_key_false(&rps_needed)) {
 		struct rps_dev_flow voidflow, *rflow = &voidflow;
-		int cpu = get_rps_cpu(skb->dev, skb, &rflow);
+		int cpu, ret;
+
+		rcu_read_lock();
+
+		cpu = get_rps_cpu(skb->dev, skb, &rflow);
 
 		if (cpu >= 0) {
 			ret = enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
 			rcu_read_unlock();
 			return ret;
 		}
+		rcu_read_unlock();
 	}
 #endif
-	ret = __netif_receive_skb(skb);
-	rcu_read_unlock();
-	return ret;
+	return __netif_receive_skb(skb);
 }
 EXPORT_SYMBOL(netif_receive_skb);
 
@@ -3325,10 +3328,8 @@ static int process_backlog(struct napi_struct *napi, int quota)
 		unsigned int qlen;
 
 		while ((skb = __skb_dequeue(&sd->process_queue))) {
-			rcu_read_lock();
 			local_irq_enable();
 			__netif_receive_skb(skb);
-			rcu_read_unlock();
 			local_irq_disable();
 			input_queue_head_incr(sd);
 			if (++work >= quota) {
@@ -4831,23 +4832,21 @@ static int dev_cpu_callback(struct notifier_block *nfb,
 	sd = &per_cpu(softnet_data, cpu);
 	oldsd = &per_cpu(softnet_data, oldcpu);
 
+	
 	list_skb = &sd->completion_queue;
 	while (*list_skb)
 		list_skb = &(*list_skb)->next;
+	
 	*list_skb = oldsd->completion_queue;
-
 	oldsd->completion_queue = NULL;
 
+	
 	if (oldsd->output_queue) {
 		*sd->output_queue_tailp = oldsd->output_queue;
 		sd->output_queue_tailp = oldsd->output_queue_tailp;
 		oldsd->output_queue = NULL;
 		oldsd->output_queue_tailp = &oldsd->output_queue;
 	}
-	/* Append NAPI poll list from offline CPU, with one exception :
-	 * process_backlog() must be called by cpu owning percpu backlog.
-	 * We properly handle process_queue & input_pkt_queue later.
-	 */
 	while (!list_empty(&oldsd->poll_list)) {
 		struct napi_struct *napi = list_first_entry(&oldsd->poll_list,
 							    struct napi_struct,

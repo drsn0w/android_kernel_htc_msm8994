@@ -3898,7 +3898,7 @@ do_more:
 	if ((flags & EXT4_FREE_BLOCKS_METADATA) && ext4_handle_valid(handle)) {
 		struct ext4_free_data *new_entry;
 	retry:
-		new_entry = kmem_cache_alloc(ext4_free_data_cachep, GFP_NOFS|__GFP_NOFAIL);
+		new_entry = kmem_cache_alloc(ext4_free_data_cachep, GFP_NOFS);
 		if (!new_entry) {
 			cond_resched();
 			congestion_wait(BLK_RW_ASYNC, HZ/50);

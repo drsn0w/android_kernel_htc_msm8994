@@ -1580,19 +1580,6 @@ static int crypt_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		iv_size_padding = crypto_ablkcipher_alignmask(any_tfm(cc));
 	}
 
-	if (crypto_ablkcipher_alignmask(any_tfm(cc)) < CRYPTO_MINALIGN) {
-		/* Allocate the padding exactly */
-		iv_size_padding = -(cc->dmreq_start + sizeof(struct dm_crypt_request))
-				& crypto_ablkcipher_alignmask(any_tfm(cc));
-	} else {
-		/*
-		 * If the cipher requires greater alignment than kmalloc
-		 * alignment, we don't know the exact position of the
-		 * initialization vector. We must assume worst case.
-		 */
-		iv_size_padding = crypto_ablkcipher_alignmask(any_tfm(cc));
-	}
-
 	ret = -ENOMEM;
 	cc->req_pool = mempool_create_kmalloc_pool(MIN_IOS, cc->dmreq_start +
 			sizeof(struct dm_crypt_request) + iv_size_padding + cc->iv_size);

@@ -2451,10 +2451,9 @@ again:
 			continue;
 
 		/*
-		 * Migrating hugepage or HWPoisoned hugepage is already
-		 * unmapped and its refcount is dropped, so just clear pte here.
+		 * HWPoisoned hugepage is already unmapped and dropped reference
 		 */
-		if (unlikely(!pte_present(pte))) {
+		if (unlikely(is_hugetlb_entry_hwpoisoned(pte))) {
 			huge_pte_clear(mm, address, ptep);
 			continue;
 		}

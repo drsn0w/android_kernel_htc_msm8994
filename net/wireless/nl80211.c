@@ -4041,16 +4041,6 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 	if (parse_station_flags(info, dev->ieee80211_ptr->iftype, &params))
 		return -EINVAL;
 
-	/* HT/VHT requires QoS, but if we don't have that just ignore HT/VHT
-	 * as userspace might just pass through the capabilities from the IEs
-	 * directly, rather than enforcing this restriction and returning an
-	 * error in this case.
-	 */
-	if (!(params.sta_flags_set & BIT(NL80211_STA_FLAG_WME))) {
-		params.ht_capa = NULL;
-		params.vht_capa = NULL;
-	}
-
 	/* When you run into this, adjust the code below for the new flag */
 	BUILD_BUG_ON(NL80211_STA_FLAG_MAX != 7);
 
@@ -6689,12 +6679,6 @@ void __cfg80211_send_event_skb(struct sk_buff *skb, gfp_t gfp)
 	/* clear CB data for netlink core to own from now on */
 	memset(skb->cb, 0, sizeof(skb->cb));
 
-#ifdef CONFIG_NL80211_TESTMODE
-	if (WARN_ON(!rdev->testmode_info)) {
-		kfree_skb(skb);
-		return -EINVAL;
-	}
-#endif
 	nla_nest_end(skb, data);
 	genlmsg_end(skb, hdr);
 
@@ -6709,23 +6693,6 @@ void __cfg80211_send_event_skb(struct sk_buff *skb, gfp_t gfp)
 }
 EXPORT_SYMBOL(__cfg80211_send_event_skb);
 
-#ifdef CONFIG_NL80211_TESTMODE
-void cfg80211_testmode_event(struct sk_buff *skb, gfp_t gfp)
-{
-	struct cfg80211_registered_device *rdev = ((void **)skb->cb)[0];
-	void *hdr = ((void **)skb->cb)[1];
-	struct nlattr *data = ((void **)skb->cb)[2];
-
-	/* clear CB data for netlink core to own from now on */
-	memset(skb->cb, 0, sizeof(skb->cb));
-
-	nla_nest_end(skb, data);
-	genlmsg_end(skb, hdr);
-	genlmsg_multicast_netns(wiphy_net(&rdev->wiphy), skb, 0,
-				nl80211_testmode_mcgrp.id, gfp);
-}
-EXPORT_SYMBOL(cfg80211_testmode_event);
-#endif
 
 static int nl80211_connect(struct sk_buff *skb, struct genl_info *info)
 {
