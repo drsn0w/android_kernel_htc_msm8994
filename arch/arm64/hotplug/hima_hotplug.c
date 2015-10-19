@@ -24,40 +24,38 @@
 #endif
 #include <linux/cpufreq.h>
 
-#define INTELLI_PLUG			"intelli_plug"
-#define INTELLI_PLUG_MAJOR_VERSION	  5
-#define INTELLI_PLUG_MINOR_VERSION	  1
+#define HIMA_HOTPLUG			             "hima_hotplug"
+#define HIMA_HOTPLUG_MAJOR_VERSION	   0
+#define HIMA_HOTPLUG_MINOR_VERSION	   2
 
-#define DEF_SAMPLING_MS			  HZ * 2
-#define RESUME_SAMPLING_MS		  HZ / 5
-#define START_DELAY_MS			  HZ * 10
-#define MIN_INPUT_INTERVAL	          150 * 1000L
-#define BOOST_LOCK_DUR			  2500 * 1000L
-#define DEFAULT_NR_CPUS_BOOSTED		  2
-#define DEFAULT_MIN_CPUS_ONLINE		  1
-#define DEFAULT_MAX_CPUS_ONLINE		  NR_CPUS
-#define DEFAULT_NR_FSHIFT                 3
-#define DEFAULT_DOWN_LOCK_DUR		  1500
-#define DEFAULT_MAX_CPUS_ONLINE_SUSP	  1
-#define CAPACITY_RESERVE		  50
+#define DEF_SAMPLING_MS                HZ * 2
+#define RESUME_SAMPLING_MS             HZ / 5
+#define START_DELAY_MS                 HZ * 50
+#define MIN_INPUT_INTERVAL	           150 * 1000L
+#define BOOST_LOCK_DUR                 2500 * 1000L
+#define DEFAULT_NR_CPUS_BOOSTED        1
+#define DEFAULT_MIN_CPUS_ONLINE        1
+#define DEFAULT_MAX_CPUS_ONLINE        4
+#define DEFAULT_NR_FSHIFT              3
+#define CAPACITY_RESERVE               50
 
 #if defined(CONFIG_ARCH_MSM8994)
-#define THREAD_CAPACITY               (430 - CAPACITY_RESERVE)
+#define THREAD_CAPACITY                (430 - CAPACITY_RESERVE)
 #else
-#define THREAD_CAPACITY			          (250 - CAPACITY_RESERVE)
+#define THREAD_CAPACITY			           (250 - CAPACITY_RESERVE)
 #endif
 
 #define CPU_NR_THRESHOLD		((THREAD_CAPACITY << 1) - (THREAD_CAPACITY >> 1))
 
-#define MULT_FACTOR			NR_CPUS
-#define DIV_FACTOR			100000
+#define MULT_FACTOR                   6
+#define DIV_FACTOR                    100000
 
 static u64 last_boost_time, last_input;
 
-static struct delayed_work intelli_plug_work;
+static struct delayed_work hima_hotplug_work;
 static struct work_struct up_down_work;
-static struct workqueue_struct *intelliplug_wq;
-static struct mutex intelli_plug_mutex;
+static struct workqueue_struct *hima_hotplug_wq;
+static struct mutex hima_hotplug_mutex;
 static struct notifier_block notif;
 
 struct ip_cpu_info {
@@ -66,62 +64,50 @@ struct ip_cpu_info {
 static DEFINE_PER_CPU(struct ip_cpu_info, ip_info);
 
 /* HotPlug Driver controls */
-static atomic_t intelli_plug_active = ATOMIC_INIT(1);
+static atomic_t hima_hotplug_active = ATOMIC_INIT(1);
 static unsigned int cpus_boosted = DEFAULT_NR_CPUS_BOOSTED;
 static unsigned int min_cpus_online = DEFAULT_MIN_CPUS_ONLINE;
 static unsigned int max_cpus_online = DEFAULT_MAX_CPUS_ONLINE;
-static unsigned int full_mode_profile = 0;
+static unsigned int current_profile_no = 0;
 static unsigned int cpu_nr_run_threshold = CPU_NR_THRESHOLD;
-
-static bool hotplug_suspended = false;
-static unsigned int min_cpus_online_res = DEFAULT_MIN_CPUS_ONLINE;
-static unsigned int max_cpus_online_res = DEFAULT_MAX_CPUS_ONLINE;
-static unsigned int max_cpus_online_susp = DEFAULT_MAX_CPUS_ONLINE_SUSP;
 
 /* HotPlug Driver Tuning */
 static unsigned int target_cpus = 0;
+static atomic_t always_on_cpu = ATOMIC_INIT(0);
 static u64 boost_lock_duration = BOOST_LOCK_DUR;
 static unsigned int def_sampling_ms = DEF_SAMPLING_MS;
 static unsigned int nr_fshift = DEFAULT_NR_FSHIFT;
 static unsigned int nr_run_hysteresis = DEFAULT_MAX_CPUS_ONLINE;
-static unsigned int debug_intelli_plug = 0;
+static unsigned int debug_hima_hotplug = 1;
 
 #define dprintk(msg...)		\
 do { 				\
-	if (debug_intelli_plug)		\
+	if (debug_hima_hotplug)		\
 		pr_info(msg);	\
 } while (0)
 
-static unsigned int nr_run_thresholds_balance[] = {
-  (THREAD_CAPACITY * 300 * MULT_FACTOR * 2) / DIV_FACTOR,
-  (THREAD_CAPACITY * 450 * MULT_FACTOR * 2) / DIV_FACTOR,
-  (THREAD_CAPACITY * 650 * MULT_FACTOR * 2) / DIV_FACTOR,
-  (THREAD_CAPACITY * 900 * MULT_FACTOR * 2) / DIV_FACTOR,
-  (THREAD_CAPACITY * 1050 * MULT_FACTOR * 2) / DIV_FACTOR,
-  (THREAD_CAPACITY * 1250 * MULT_FACTOR * 2) / DIV_FACTOR,
+static unsigned int nr_run_thresholds_big_cluster[] = {
+  (THREAD_CAPACITY * 500 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 800 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1000 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1100 * MULT_FACTOR * 2) / DIV_FACTOR,
+  UINT_MAX
+};
+
+static unsigned int nr_run_thresholds_little_cluster[] = {
+  (THREAD_CAPACITY * 400 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 700 * MULT_FACTOR * 2) / DIV_FACTOR,
+  (THREAD_CAPACITY * 1000 * MULT_FACTOR * 2) / DIV_FACTOR,
   (THREAD_CAPACITY * 1300 * MULT_FACTOR * 2) / DIV_FACTOR,
   UINT_MAX
 };
 
-static unsigned int nr_run_thresholds_performance[] = {
-	(THREAD_CAPACITY * 300 * MULT_FACTOR) / DIV_FACTOR,
-  (THREAD_CAPACITY * 550 * MULT_FACTOR) / DIV_FACTOR,
-  (THREAD_CAPACITY * 800 * MULT_FACTOR) / DIV_FACTOR,
-  (THREAD_CAPACITY * 1050 * MULT_FACTOR) / DIV_FACTOR,
-  (THREAD_CAPACITY * 1300 * MULT_FACTOR) / DIV_FACTOR,
-  (THREAD_CAPACITY * 1550 * MULT_FACTOR) / DIV_FACTOR,
-  (THREAD_CAPACITY * 1800 * MULT_FACTOR) / DIV_FACTOR,
-  UINT_MAX
-};
+//static unsigned int little_cluster_sum = 207; 
 
 static unsigned int nr_run_thresholds_conservative[] = {
   (THREAD_CAPACITY * 300 * MULT_FACTOR * 3) / DIV_FACTOR,
   (THREAD_CAPACITY * 550 * MULT_FACTOR * 3) / DIV_FACTOR,
   (THREAD_CAPACITY * 800 * MULT_FACTOR * 3) / DIV_FACTOR,
-  (THREAD_CAPACITY * 1050 * MULT_FACTOR * 3) / DIV_FACTOR,
-  (THREAD_CAPACITY * 1300 * MULT_FACTOR * 3) / DIV_FACTOR,
-  (THREAD_CAPACITY * 1550 * MULT_FACTOR * 3) / DIV_FACTOR,
-  (THREAD_CAPACITY * 1800 * MULT_FACTOR * 3) / DIV_FACTOR,
   UINT_MAX
 };
 
@@ -131,42 +117,13 @@ static unsigned int nr_run_thresholds_disable[] = {
 
 
 static unsigned int *nr_run_profiles[] = {
-	nr_run_thresholds_balance,
-	nr_run_thresholds_performance,
+	nr_run_thresholds_big_cluster,
+	nr_run_thresholds_little_cluster,
 	nr_run_thresholds_conservative,
 	nr_run_thresholds_disable
 	};
 
 static unsigned int nr_run_last;
-static unsigned int down_lock_dur = DEFAULT_DOWN_LOCK_DUR;
-
-struct down_lock {
-	unsigned int locked;
-	struct delayed_work lock_rem;
-};
-static DEFINE_PER_CPU(struct down_lock, lock_info);
-
-static void apply_down_lock(unsigned int cpu)
-{
-	struct down_lock *dl = &per_cpu(lock_info, cpu);
-
-	dl->locked = 1;
-	queue_delayed_work_on(0, intelliplug_wq, &dl->lock_rem,
-			      msecs_to_jiffies(down_lock_dur));
-}
-
-static void remove_down_lock(struct work_struct *work)
-{
-	struct down_lock *dl = container_of(work, struct down_lock,
-					    lock_rem.work);
-	dl->locked = 0;
-}
-
-static int check_down_lock(unsigned int cpu)
-{
-	struct down_lock *dl = &per_cpu(lock_info, cpu);
-	return dl->locked;
-}
 
 static unsigned int calculate_thread_stats(void)
 {
@@ -175,14 +132,14 @@ static unsigned int calculate_thread_stats(void)
 	unsigned int threshold_size;
 	unsigned int *current_profile;
 
-	threshold_size = max_cpus_online;
-	nr_run_hysteresis = max_cpus_online + 4;
+	threshold_size = 4;
+	nr_run_hysteresis = 8;
 	nr_fshift = 4;
 
 	for (nr_run = 1; nr_run < threshold_size; nr_run++) {
 		unsigned int nr_threshold;
 		
-		current_profile = nr_run_profiles[full_mode_profile];
+		current_profile = nr_run_profiles[current_profile_no];
 		nr_threshold = current_profile[nr_run - 1];
 
 		if (nr_run_last <= nr_run)
@@ -226,12 +183,10 @@ static void __ref cpu_up_down_work(struct work_struct *work)
 
 		update_per_cpu_stat();
 		for_each_online_cpu(cpu) {
-			if (cpu == 0)
+			if (cpu == atomic_read(&always_on_cpu))
 				continue;
-			if (check_down_lock(cpu))
-				break;
-			l_nr_threshold =
-				cpu_nr_run_threshold << 1 / (num_online_cpus());
+			  
+			l_nr_threshold = cpu_nr_run_threshold << 1 / (num_online_cpus());
 			l_ip_info = &per_cpu(ip_info, cpu);
 			if (l_ip_info->cpu_nr_running < l_nr_threshold)
 				cpu_down(cpu);
@@ -240,112 +195,121 @@ static void __ref cpu_up_down_work(struct work_struct *work)
 		}
 	} else if (target > online_cpus) {
 		for_each_cpu_not(cpu, cpu_online_mask) {
-			if (cpu == 0)
+		  if(cpu < atomic_read(&always_on_cpu))
 				continue;
 			cpu_up(cpu);
-			apply_down_lock(cpu);
 			if (target <= num_online_cpus())
 				break;
 		}
 	}
 }
 
-static void intelli_plug_work_fn(struct work_struct *work)
+static void hima_hotplug_work_fn(struct work_struct *work)
 {
-	if (hotplug_suspended && max_cpus_online_susp <= 1) {
-		dprintk("intelli_plug is suspended!\n");
-		return;
-	}
-
 	target_cpus = calculate_thread_stats();
-	queue_work_on(0, intelliplug_wq, &up_down_work);
+	queue_work_on(atomic_read(&always_on_cpu), hima_hotplug_wq, &up_down_work);
 
-	if (atomic_read(&intelli_plug_active) == 1)
-		queue_delayed_work_on(0, intelliplug_wq, &intelli_plug_work,
+	if (atomic_read(&hima_hotplug_active) == 1)
+		queue_delayed_work_on(atomic_read(&always_on_cpu), hima_hotplug_wq, &hima_hotplug_work,
 					msecs_to_jiffies(def_sampling_ms));
 }
 
-static void intelli_plug_suspend(void)
+static void __ref hima_hotplug_suspend(void)
 {
 	int cpu = 0;
-
-	mutex_lock(&intelli_plug_mutex);
-	hotplug_suspended = true;
-	min_cpus_online_res = min_cpus_online;
-	min_cpus_online = 1;
-	max_cpus_online_res = max_cpus_online;
-	max_cpus_online = max_cpus_online_susp;
-	mutex_unlock(&intelli_plug_mutex);
-
-	/* Do not cancel hotplug work unless max_cpus_online_susp is 1 */
-	if (max_cpus_online_susp > 1 &&
-		full_mode_profile != 3)
-		return;
-
-	/* Flush hotplug workqueue */
-	flush_workqueue(intelliplug_wq);
-	cancel_delayed_work_sync(&intelli_plug_work);
-
-	/* Put all sibling cores to sleep */
+  
+  mutex_lock(&hima_hotplug_mutex);
+  
+  /* Flush hotplug workqueue */
+	flush_workqueue(hima_hotplug_wq);
+	cancel_delayed_work_sync(&hima_hotplug_work);
+  cancel_work_sync(&up_down_work);
+  
+  current_profile_no = 1;
+  atomic_set(&always_on_cpu, 0);
+  
+	/* Bring cpu 0 up if not up already */
+	  cpu_up(0);
+	
+	/* Bring CPU4 down */
+	  cpu_down(4);
+	
+	/* Shut all core beside 0 off */ 
 	for_each_online_cpu(cpu) {
 		if (cpu == 0)
 			continue;
 		cpu_down(cpu);
 	}
+	
+  /* Make sure CPU4 is really down */
+	  cpu_down(4);
+	
+	/* Clear task on CPU4 */
+	clear_tasks_mm_cpumask(4);
+	
+	/* Start workqueue on CPU0 */
+	INIT_WORK(&up_down_work, cpu_up_down_work);
+	INIT_DELAYED_WORK(&hima_hotplug_work, hima_hotplug_work_fn);
+	queue_delayed_work_on(atomic_read(&always_on_cpu), hima_hotplug_wq, &hima_hotplug_work,
+				      msecs_to_jiffies(DEF_SAMPLING_MS));
+				      
+	mutex_unlock(&hima_hotplug_mutex);
 }
 
-static void __ref intelli_plug_resume(void)
+static void __ref hima_hotplug_resume(void)
 {
-	int cpu, required_reschedule = 0, required_wakeup = 0;
+	int cpu = 0;
 
-	if (hotplug_suspended) {
-		mutex_lock(&intelli_plug_mutex);
-		hotplug_suspended = false;
-		min_cpus_online = min_cpus_online_res;
-		max_cpus_online = max_cpus_online_res;
-		mutex_unlock(&intelli_plug_mutex);
-		required_wakeup = 1;
-		/* Initiate hotplug work if it was cancelled */
-		if (max_cpus_online_susp <= 1 ||
-			full_mode_profile == 3) {
-			required_reschedule = 1;
-			INIT_DELAYED_WORK(&intelli_plug_work, intelli_plug_work_fn);
-		}
+	mutex_lock(&hima_hotplug_mutex);
+	current_profile_no = 0;
+	atomic_set(&always_on_cpu, 4);
+
+  /* Flush hotplug workqueue */
+	flush_workqueue(hima_hotplug_wq);
+	cancel_delayed_work_sync(&hima_hotplug_work);
+	cancel_work_sync(&up_down_work);
+
+	/* Bring core 4 on */
+	  cpu_up(4);
+	
+  /* Force CPU0 down */
+	  cpu_down(0);
+	
+	/* Shut all cores beside 4 off */ 
+	for_each_online_cpu(cpu) {
+		if (cpu == 4)
+			continue;
+		cpu_down(cpu);
 	}
-
-#ifdef CONFIG_CPU_BOOST
-	if (wakeup_boost || required_wakeup) {
-#else
-	if (required_wakeup) {
-#endif
-		/* Fire up all CPUs */
-		for_each_cpu_not(cpu, cpu_online_mask) {
-			if (cpu == 0)
-				continue;
-			cpu_up(cpu);
-			apply_down_lock(cpu);
-		}
-	}
-
-	/* Resume hotplug workqueue if required */
-	if (required_reschedule)
-		queue_delayed_work_on(0, intelliplug_wq, &intelli_plug_work,
+	
+  /* Make sure CPU0 is really down */
+	  cpu_down(0);
+	
+	/* Clear task on CPU0 */
+	clear_tasks_mm_cpumask(0);
+	
+	/* Start workqueue on CPU4 */
+	INIT_WORK(&up_down_work, cpu_up_down_work);
+	INIT_DELAYED_WORK(&hima_hotplug_work, hima_hotplug_work_fn);
+	queue_delayed_work_on(atomic_read(&always_on_cpu), hima_hotplug_wq, &hima_hotplug_work,
 				      msecs_to_jiffies(RESUME_SAMPLING_MS));
+				      
+	mutex_unlock(&hima_hotplug_mutex);
 }
 
 #ifdef CONFIG_STATE_NOTIFIER
 static int state_notifier_callback(struct notifier_block *this,
 				unsigned long event, void *data)
 {
-	if (atomic_read(&intelli_plug_active) == 0)
+	if (atomic_read(&hima_hotplug_active) == 0)
 		return NOTIFY_OK;
 
 	switch (event) {
 		case STATE_NOTIFIER_ACTIVE:
-			intelli_plug_resume();
+			hima_hotplug_resume();
 			break;
 		case STATE_NOTIFIER_SUSPEND:
-			intelli_plug_suspend();
+			hima_hotplug_suspend();
 			break;
 		default:
 			break;
@@ -355,12 +319,12 @@ static int state_notifier_callback(struct notifier_block *this,
 }
 #endif
 
-static void intelli_plug_input_event(struct input_handle *handle,
+static void hima_hotplug_input_event(struct input_handle *handle,
 		unsigned int type, unsigned int code, int value)
 {
 	u64 now;
 
-	if (hotplug_suspended || cpus_boosted == 1)
+	if (cpus_boosted == 1)
 		return;
 
 	now = ktime_to_us(ktime_get());
@@ -374,11 +338,11 @@ static void intelli_plug_input_event(struct input_handle *handle,
 		return;
 
 	target_cpus = cpus_boosted;
-	queue_work_on(0, intelliplug_wq, &up_down_work);
+	queue_work_on(atomic_read(&always_on_cpu), hima_hotplug_wq, &up_down_work);
 	last_boost_time = ktime_to_us(ktime_get());
 }
 
-static int intelli_plug_input_connect(struct input_handler *handler,
+static int hima_hotplug_input_connect(struct input_handler *handler,
 				 struct input_dev *dev,
 				 const struct input_device_id *id)
 {
@@ -411,14 +375,14 @@ err_register:
 	return err;
 }
 
-static void intelli_plug_input_disconnect(struct input_handle *handle)
+static void hima_hotplug_input_disconnect(struct input_handle *handle)
 {
 	input_close_device(handle);
 	input_unregister_handle(handle);
 	kfree(handle);
 }
 
-static const struct input_device_id intelli_plug_ids[] = {
+static const struct input_device_id hima_hotplug_ids[] = {
 	{
 		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
 			 INPUT_DEVICE_ID_MATCH_ABSBIT,
@@ -437,23 +401,23 @@ static const struct input_device_id intelli_plug_ids[] = {
 	{ },
 };
 
-static struct input_handler intelli_plug_input_handler = {
-	.event          = intelli_plug_input_event,
-	.connect        = intelli_plug_input_connect,
-	.disconnect     = intelli_plug_input_disconnect,
-	.name           = "intelliplug_handler",
-	.id_table       = intelli_plug_ids,
+static struct input_handler hima_hotplug_input_handler = {
+	.event          = hima_hotplug_input_event,
+	.connect        = hima_hotplug_input_connect,
+	.disconnect     = hima_hotplug_input_disconnect,
+	.name           = "hima_hotplug_handler",
+	.id_table       = hima_hotplug_ids,
 };
 
-static int __ref intelli_plug_start(void)
+static int __ref hima_hotplug_start(void)
 {
 	int cpu, ret = 0;
-	struct down_lock *dl;
+	atomic_set(&always_on_cpu, 4);
 
-	intelliplug_wq = alloc_workqueue("intelliplug", WQ_HIGHPRI | WQ_FREEZABLE, 0);
-	if (!intelliplug_wq) {
+	hima_hotplug_wq = alloc_workqueue("hima_hotplug", WQ_HIGHPRI | WQ_FREEZABLE, 0);
+	if (!hima_hotplug_wq) {
 		pr_err("%s: Failed to allocate hotplug workqueue\n",
-		       INTELLI_PLUG);
+		       HIMA_HOTPLUG);
 		ret = -ENOMEM;
 		goto err_out;
 	}
@@ -462,80 +426,66 @@ static int __ref intelli_plug_start(void)
 	notif.notifier_call = state_notifier_callback;
 	if (state_register_client(&notif)) {
 		pr_err("%s: Failed to register State notifier callback\n",
-			INTELLI_PLUG);
+			HIMA_HOTPLUG);
 		goto err_dev;
 	}
 #endif
 
-	ret = input_register_handler(&intelli_plug_input_handler);
+	ret = input_register_handler(&hima_hotplug_input_handler);
 	if (ret) {
 		pr_err("%s: Failed to register input handler: %d\n",
-		       INTELLI_PLUG, ret);
+		       HIMA_HOTPLUG, ret);
 		goto err_dev;
 	}
 
-	mutex_init(&intelli_plug_mutex);
+	mutex_init(&hima_hotplug_mutex);
 
 	INIT_WORK(&up_down_work, cpu_up_down_work);
-	INIT_DELAYED_WORK(&intelli_plug_work, intelli_plug_work_fn);
-	for_each_possible_cpu(cpu) {
-		dl = &per_cpu(lock_info, cpu);
-		INIT_DELAYED_WORK(&dl->lock_rem, remove_down_lock);
-	}
-
+	INIT_DELAYED_WORK(&hima_hotplug_work, hima_hotplug_work_fn);
+	
 	/* Fire up all CPUs */
 	for_each_cpu_not(cpu, cpu_online_mask) {
-		if (cpu == 0)
-			continue;
 		cpu_up(cpu);
-		apply_down_lock(cpu);
 	}
 
-	queue_delayed_work_on(0, intelliplug_wq, &intelli_plug_work,
+	queue_delayed_work_on(atomic_read(&always_on_cpu), hima_hotplug_wq, &hima_hotplug_work,
 			      START_DELAY_MS);
 
 	return ret;
 err_dev:
-	destroy_workqueue(intelliplug_wq);
+	destroy_workqueue(hima_hotplug_wq);
 err_out:
-	atomic_set(&intelli_plug_active, 0);
+	atomic_set(&hima_hotplug_active, 0);
 	return ret;
 }
 
-static void intelli_plug_stop(void)
+static void hima_hotplug_stop(void)
 {
-	int cpu;
-	struct down_lock *dl;
-
-	for_each_possible_cpu(cpu) {
-		dl = &per_cpu(lock_info, cpu);
-		cancel_delayed_work_sync(&dl->lock_rem);
-	}
-	flush_workqueue(intelliplug_wq);
+	flush_workqueue(hima_hotplug_wq);
 	cancel_work_sync(&up_down_work);
-	cancel_delayed_work_sync(&intelli_plug_work);
-	mutex_destroy(&intelli_plug_mutex);
+	cancel_delayed_work_sync(&hima_hotplug_work);
+	mutex_destroy(&hima_hotplug_mutex);
 #ifdef CONFIG_STATE_NOTIFIER
 	state_unregister_client(&notif);
 #endif
 	notif.notifier_call = NULL;
 
-	input_unregister_handler(&intelli_plug_input_handler);
-	destroy_workqueue(intelliplug_wq);
+	input_unregister_handler(&hima_hotplug_input_handler);
+	destroy_workqueue(hima_hotplug_wq);
 }
 
-static void intelli_plug_active_eval_fn(unsigned int status)
+static void hima_hotplug_active_eval_fn(unsigned int status)
 {
 	int ret = 0;
 
 	if (status == 1) {
-		ret = intelli_plug_start();
+		ret = hima_hotplug_start();
 		if (ret)
 			status = 0;
 	} else
-		intelli_plug_stop();
+		hima_hotplug_stop();
 
-	atomic_set(&intelli_plug_active, status);
+	atomic_set(&hima_hotplug_active, status);
 }
 
 #define show_one(file_name, object)				\
@@ -548,14 +498,12 @@ static ssize_t show_##file_name					\
 show_one(cpus_boosted, cpus_boosted);
 show_one(min_cpus_online, min_cpus_online);
 show_one(max_cpus_online, max_cpus_online);
-show_one(max_cpus_online_susp, max_cpus_online_susp);
-show_one(full_mode_profile, full_mode_profile);
+show_one(current_profile_no, current_profile_no);
 show_one(cpu_nr_run_threshold, cpu_nr_run_threshold);
 show_one(def_sampling_ms, def_sampling_ms);
-show_one(debug_intelli_plug, debug_intelli_plug);
+show_one(debug_hima_hotplug, debug_hima_hotplug);
 show_one(nr_fshift, nr_fshift);
 show_one(nr_run_hysteresis, nr_run_hysteresis);
-show_one(down_lock_duration, down_lock_dur);
 
 #define store_one(file_name, object)		\
 static ssize_t store_##file_name		\
@@ -576,23 +524,22 @@ static ssize_t store_##file_name		\
 }
 
 store_one(cpus_boosted, cpus_boosted);
-store_one(full_mode_profile, full_mode_profile);
+store_one(current_profile_no, current_profile_no);
 store_one(cpu_nr_run_threshold, cpu_nr_run_threshold);
 store_one(def_sampling_ms, def_sampling_ms);
-store_one(debug_intelli_plug, debug_intelli_plug);
+store_one(debug_hima_hotplug, debug_hima_hotplug);
 store_one(nr_fshift, nr_fshift);
 store_one(nr_run_hysteresis, nr_run_hysteresis);
-store_one(down_lock_duration, down_lock_dur);
 
-static ssize_t show_intelli_plug_active(struct kobject *kobj,
+static ssize_t show_hima_hotplug_active(struct kobject *kobj,
 					struct kobj_attribute *attr, 
 					char *buf)
 {
 	return sprintf(buf, "%d\n",
-			atomic_read(&intelli_plug_active));
+			atomic_read(&hima_hotplug_active));
 }
 
-static ssize_t store_intelli_plug_active(struct kobject *kobj,
+static ssize_t store_hima_hotplug_active(struct kobject *kobj,
 					 struct kobj_attribute *attr,
 					 const char *buf, size_t count)
 {
@@ -608,10 +555,10 @@ static ssize_t store_intelli_plug_active(struct kobject *kobj,
 	else if (input > 0)
 		input = 1;
 
-	if (input == atomic_read(&intelli_plug_active))
+	if (input == atomic_read(&hima_hotplug_active))
 		return count;
 
-	intelli_plug_active_eval_fn(input);
+	hima_hotplug_active_eval_fn(input);
 
 	return count;
 }
@@ -677,88 +624,68 @@ static ssize_t store_max_cpus_online(struct kobject *kobj,
 	return count;
 }
 
-static ssize_t store_max_cpus_online_susp(struct kobject *kobj,
-				     struct kobj_attribute *attr,
-				     const char *buf, size_t count)
-{
-	int ret;
-	unsigned int val;
-
-	ret = sscanf(buf, "%u", &val);
-	if (ret != 1 || val < 1 || val > NR_CPUS)
-		return -EINVAL;
-
-	max_cpus_online_susp = val;
-
-	return count;
-}
-
 #define KERNEL_ATTR_RW(_name) \
 static struct kobj_attribute _name##_attr = \
 	__ATTR(_name, 0664, show_##_name, store_##_name)
 
-KERNEL_ATTR_RW(intelli_plug_active);
+KERNEL_ATTR_RW(hima_hotplug_active);
 KERNEL_ATTR_RW(cpus_boosted);
 KERNEL_ATTR_RW(min_cpus_online);
 KERNEL_ATTR_RW(max_cpus_online);
-KERNEL_ATTR_RW(max_cpus_online_susp);
-KERNEL_ATTR_RW(full_mode_profile);
+KERNEL_ATTR_RW(current_profile_no);
 KERNEL_ATTR_RW(cpu_nr_run_threshold);
 KERNEL_ATTR_RW(boost_lock_duration);
 KERNEL_ATTR_RW(def_sampling_ms);
-KERNEL_ATTR_RW(debug_intelli_plug);
+KERNEL_ATTR_RW(debug_hima_hotplug);
 KERNEL_ATTR_RW(nr_fshift);
 KERNEL_ATTR_RW(nr_run_hysteresis);
-KERNEL_ATTR_RW(down_lock_duration);
 
-static struct attribute *intelli_plug_attrs[] = {
-	&intelli_plug_active_attr.attr,
+static struct attribute *hima_hotplug_attrs[] = {
+	&hima_hotplug_active_attr.attr,
 	&cpus_boosted_attr.attr,
 	&min_cpus_online_attr.attr,
 	&max_cpus_online_attr.attr,
-	&max_cpus_online_susp_attr.attr,
-	&full_mode_profile_attr.attr,
+	&current_profile_no_attr.attr,
 	&cpu_nr_run_threshold_attr.attr,
 	&boost_lock_duration_attr.attr,
 	&def_sampling_ms_attr.attr,
-	&debug_intelli_plug_attr.attr,
+	&debug_hima_hotplug_attr.attr,
 	&nr_fshift_attr.attr,
 	&nr_run_hysteresis_attr.attr,
-	&down_lock_duration_attr.attr,
 	NULL,
 };
 
-static struct attribute_group intelli_plug_attr_group = {
-	.attrs = intelli_plug_attrs,
-	.name = "intelli_plug",
+static struct attribute_group hima_hotplug_attr_group = {
+	.attrs = hima_hotplug_attrs,
+	.name = "hima_hotplug",
 };
 
-static int __init intelli_plug_init(void)
+static int __init hima_hotplug_init(void)
 {
 	int rc;
 
-	rc = sysfs_create_group(kernel_kobj, &intelli_plug_attr_group);
+	rc = sysfs_create_group(kernel_kobj, &hima_hotplug_attr_group);
 
-	pr_info("intelli_plug: version %d.%d\n",
-		 INTELLI_PLUG_MAJOR_VERSION,
-		 INTELLI_PLUG_MINOR_VERSION);
+	pr_info("HIMA_HOTPLUG: version %d.%d\n",
+		 HIMA_HOTPLUG_MAJOR_VERSION,
+		 HIMA_HOTPLUG_MINOR_VERSION);
 
-	if (atomic_read(&intelli_plug_active) == 1)
-		intelli_plug_start();
+	if (atomic_read(&hima_hotplug_active) == 1)
+		hima_hotplug_start();
 
 	return 0;
 }
 
-static void __exit intelli_plug_exit(void)
+static void __exit hima_hotplug_exit(void)
 {
 
-	if (atomic_read(&intelli_plug_active) == 1)
-		intelli_plug_stop();
-	sysfs_remove_group(kernel_kobj, &intelli_plug_attr_group);
+	if (atomic_read(&hima_hotplug_active) == 1)
+		hima_hotplug_stop();
+	sysfs_remove_group(kernel_kobj, &hima_hotplug_attr_group);
 }
 
-late_initcall(intelli_plug_init);
-module_exit(intelli_plug_exit);
+late_initcall(hima_hotplug_init);
+module_exit(hima_hotplug_exit);
 
 MODULE_AUTHOR("Paul Reioux <reioux@gmail.com>");
 MODULE_DESCRIPTION("'intell_plug' - An intelligent cpu hotplug driver for "

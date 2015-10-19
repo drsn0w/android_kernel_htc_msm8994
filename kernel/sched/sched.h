@@ -22,7 +22,7 @@ extern __read_mostly int scheduler_running;
 
 #define NS_TO_JIFFIES(TIME)	((unsigned long)(TIME) / (NSEC_PER_SEC / HZ))
 
-#if 0 
+#if 0
 # define SCHED_LOAD_RESOLUTION	10
 # define scale_load(w)		((w) << SCHED_LOAD_RESOLUTION)
 # define scale_load_down(w)	((w) >> SCHED_LOAD_RESOLUTION)
@@ -1153,7 +1153,7 @@ static inline u64 steal_ticks(u64 steal)
 }
 #endif
 
-#ifdef CONFIG_INTELLI_PLUG
+#ifdef CONFIG_HIMA_HOTPLUG
 
 struct nr_stats_s {
 	/* time-based average load */
@@ -1191,18 +1191,18 @@ static inline unsigned int do_avg_nr_running(struct rq *rq)
 
 static inline void inc_nr_running(struct rq *rq)
 {
-#ifdef CONFIG_INTELLI_PLUG
+#ifdef CONFIG_HIMA_HOTPLUG
 	struct nr_stats_s *nr_stats = &per_cpu(runqueue_stats, rq->cpu);
 #endif
 	sched_update_nr_prod(cpu_of(rq), 1, true);
-#ifdef CONFIG_INTELLI_PLUG
+#ifdef CONFIG_HIMA_HOTPLUG
 	write_seqcount_begin(&nr_stats->ave_seqcnt);
 	nr_stats->ave_nr_running = do_avg_nr_running(rq);
 	nr_stats->nr_last_stamp = rq->clock_task;
 #endif
 	rq->nr_running++;
 
-#ifdef CONFIG_INTELLI_PLUG
+#ifdef CONFIG_HIMA_HOTPLUG
 	write_seqcount_end(&nr_stats->ave_seqcnt);
 #endif
 

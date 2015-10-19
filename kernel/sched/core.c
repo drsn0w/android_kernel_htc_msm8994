@@ -160,7 +160,7 @@ void start_bandwidth_timer(struct hrtimer *period_timer, ktime_t period)
 DEFINE_MUTEX(sched_domains_mutex);
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
-#ifdef CONFIG_INTELLI_PLUG
+#ifdef CONFIG_HIMA_HOTPLUG
 DEFINE_PER_CPU_SHARED_ALIGNED(struct nr_stats_s, runqueue_stats);
 #endif
 
@@ -3048,7 +3048,7 @@ unsigned long nr_iowait(void)
 	return sum;
 }
 
-#ifdef CONFIG_INTELLI_PLUG
+#ifdef CONFIG_HIMA_HOTPLUG
 unsigned long avg_nr_running(void)
 {
 	unsigned long i, sum = 0;
