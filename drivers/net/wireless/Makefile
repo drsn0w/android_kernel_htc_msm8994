@@ -11,7 +11,7 @@ obj-$(CONFIG_AIRO)		+= airo.o
 obj-$(CONFIG_AIRO_CS)		+= airo_cs.o airo.o
 
 obj-$(CONFIG_ATMEL)             += atmel.o
-obj-$(CONFIG_PCI_ATMEL)         += atmel_pci.o 
+obj-$(CONFIG_PCI_ATMEL)         += atmel_pci.o
 obj-$(CONFIG_PCMCIA_ATMEL)      += atmel_cs.o
 
 obj-$(CONFIG_AT76C50X_USB)      += at76c50x-usb.o
@@ -61,7 +61,7 @@ obj-$(CONFIG_BRCMSMAC)	+= brcm80211/
 obj-$(CONFIG_LIBRA_SDIOIF)	+= libra/
 obj-$(CONFIG_WCNSS_CORE)	+= wcnss/
 obj-$(CONFIG_CNSS)		+= cnss/
-obj-$(CONFIG_BCM4356)          += bcmdhd_4356/
+obj-$(CONFIG_BCM4356)          += bcmdhd/
 obj-$(CONFIG_BCMDHD_GPIO)      += bcmdhd_gpio/
 
 # HTC WLAN
