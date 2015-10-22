@@ -138,7 +138,7 @@ static unsigned int calculate_thread_stats(void)
 
 	for (nr_run = 1; nr_run < threshold_size; nr_run++) {
 		unsigned int nr_threshold;
-
+		
 		current_profile = nr_run_profiles[current_profile_no];
 		nr_threshold = current_profile[nr_run - 1];
 
@@ -183,8 +183,9 @@ static void __ref cpu_up_down_work(struct work_struct *work)
 
 		update_per_cpu_stat();
 		for_each_online_cpu(cpu) {
-			if (cpu == 0 || cpu == atomic_read(&always_on_cpu))
+			if (cpu == atomic_read(&always_on_cpu))
 				continue;
+			  
 			l_nr_threshold = cpu_nr_run_threshold << 1 / (num_online_cpus());
 			l_ip_info = &per_cpu(ip_info, cpu);
 			if (l_ip_info->cpu_nr_running < l_nr_threshold)
@@ -194,7 +195,7 @@ static void __ref cpu_up_down_work(struct work_struct *work)
 		}
 	} else if (target > online_cpus) {
 		for_each_cpu_not(cpu, cpu_online_mask) {
-		  if(cpu == 0 || cpu < atomic_read(&always_on_cpu))
+		  if(cpu < atomic_read(&always_on_cpu))
 				continue;
 			cpu_up(cpu);
 			if (target <= num_online_cpus())
@@ -227,6 +228,7 @@ static void __ref hima_hotplug_suspend(void)
   current_profile_no = 1;
   atomic_set(&always_on_cpu, 0);
   
+  /* enable cpu hotplugging  */
   cpu_hotplug_enable();
   
 	/* Bring cpu 0 up if not up already */
@@ -274,20 +276,20 @@ static void __ref hima_hotplug_resume(void)
 	  cpu_up(4);
 	
   /* Force CPU0 down */
-	  //cpu_down(0);
+	  cpu_down(0);
 	
 	/* Shut all cores beside 4 off */ 
 	for_each_online_cpu(cpu) {
-		if (cpu== 0 || cpu == 4)
+		if (cpu == 4)
 			continue;
 		cpu_down(cpu);
 	}
 	
   /* Make sure CPU0 is really down */
-	  //cpu_down(0);
+	  cpu_down(0);
 	
 	/* Clear task on CPU0 */
-	//clear_tasks_mm_cpumask(0);
+	clear_tasks_mm_cpumask(0);
 	
 	/* Start workqueue on CPU4 */
 	INIT_WORK(&up_down_work, cpu_up_down_work);
