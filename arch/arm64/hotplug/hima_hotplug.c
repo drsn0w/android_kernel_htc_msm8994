@@ -138,7 +138,6 @@ static unsigned int calculate_thread_stats(void)
 
 	for (nr_run = 1; nr_run < threshold_size; nr_run++) {
 		unsigned int nr_threshold;
-		
 		current_profile = nr_run_profiles[current_profile_no];
 		nr_threshold = current_profile[nr_run - 1];
 
@@ -183,9 +182,8 @@ static void __ref cpu_up_down_work(struct work_struct *work)
 
 		update_per_cpu_stat();
 		for_each_online_cpu(cpu) {
-			if (cpu == atomic_read(&always_on_cpu))
+			if (cpu == 4 || cpu == 0)
 				continue;
-			  
 			l_nr_threshold = cpu_nr_run_threshold << 1 / (num_online_cpus());
 			l_ip_info = &per_cpu(ip_info, cpu);
 			if (l_ip_info->cpu_nr_running < l_nr_threshold)
@@ -195,7 +193,7 @@ static void __ref cpu_up_down_work(struct work_struct *work)
 		}
 	} else if (target > online_cpus) {
 		for_each_cpu_not(cpu, cpu_online_mask) {
-		  if(cpu < atomic_read(&always_on_cpu))
+		  if(cpu < atomic_read(&always_on_cpu) || cpu == 0)
 				continue;
 			cpu_up(cpu);
 			if (target <= num_online_cpus())
@@ -217,45 +215,34 @@ static void hima_hotplug_work_fn(struct work_struct *work)
 static void __ref hima_hotplug_suspend(void)
 {
 	int cpu = 0;
-  
-  mutex_lock(&hima_hotplug_mutex);
-  
+	mutex_lock(&hima_hotplug_mutex);
   /* Flush hotplug workqueue */
 	flush_workqueue(hima_hotplug_wq);
 	cancel_delayed_work_sync(&hima_hotplug_work);
-  cancel_work_sync(&up_down_work);
-  
-  current_profile_no = 1;
-  atomic_set(&always_on_cpu, 0);
-  
-  /* enable cpu hotplugging  */
-  cpu_hotplug_enable();
-  
-	/* Bring cpu 0 up if not up already */
-	  cpu_up(0);
-	
+	cancel_work_sync(&up_down_work);
+  	current_profile_no = 1;
+	atomic_set(&always_on_cpu, 0);
+
 	/* Bring CPU4 down */
 	  cpu_down(4);
-	
-	/* Shut all core beside 0 off */ 
+
+	/* Shut all core beside 0 off */
 	for_each_online_cpu(cpu) {
 		if (cpu == 0)
 			continue;
 		cpu_down(cpu);
 	}
-	
   /* Make sure CPU4 is really down */
 	  cpu_down(4);
-	
-	/* Clear task on CPU4 */
+
+  /* Clear task on CPU4 */
 	clear_tasks_mm_cpumask(4);
-	
-	/* Start workqueue on CPU0 */
+
+  /* Start workqueue on CPU0 */
 	INIT_WORK(&up_down_work, cpu_up_down_work);
 	INIT_DELAYED_WORK(&hima_hotplug_work, hima_hotplug_work_fn);
 	queue_delayed_work_on(atomic_read(&always_on_cpu), hima_hotplug_wq, &hima_hotplug_work,
 				      msecs_to_jiffies(DEF_SAMPLING_MS));
-				      
 	mutex_unlock(&hima_hotplug_mutex);
 }
 
@@ -272,31 +259,22 @@ static void __ref hima_hotplug_resume(void)
 	cancel_delayed_work_sync(&hima_hotplug_work);
 	cancel_work_sync(&up_down_work);
 
-	/* Bring core 4 on */
+  /* Bring core 4 on */
 	  cpu_up(4);
-	
-  /* Force CPU0 down */
-	  cpu_down(0);
-	
-	/* Shut all cores beside 4 off */ 
+
+  /* Shut all cores beside 4 off */
 	for_each_online_cpu(cpu) {
-		if (cpu == 4)
+		if (cpu == 4 || cpu == 0)
 			continue;
 		cpu_down(cpu);
 	}
-	
-  /* Make sure CPU0 is really down */
-	  cpu_down(0);
-	
-	/* Clear task on CPU0 */
-	clear_tasks_mm_cpumask(0);
-	
-	/* Start workqueue on CPU4 */
+
+  /* Start workqueue on CPU4 */
 	INIT_WORK(&up_down_work, cpu_up_down_work);
 	INIT_DELAYED_WORK(&hima_hotplug_work, hima_hotplug_work_fn);
 	queue_delayed_work_on(atomic_read(&always_on_cpu), hima_hotplug_wq, &hima_hotplug_work,
 				      msecs_to_jiffies(RESUME_SAMPLING_MS));
-				      
+
 	mutex_unlock(&hima_hotplug_mutex);
 }
 
